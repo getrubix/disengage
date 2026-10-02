@@ -136,6 +136,16 @@ function Remove-DgGraphResource {
 
 function Connect-DgGraph {
     param([Parameter(Mandatory)][hashtable]$Config)
+    # Reuse an existing session for the same tenant and identity (e.g. the one setup just created).
+    $current = Get-MgContext
+    if ($current -and $current.TenantId -eq $Config.TenantId) {
+        $sameIdentity = if ($Config.Auth.Mode -eq 'Certificate') { $current.ClientId -eq $Config.Auth.ClientId -and $current.AuthType -eq 'AppOnly' }
+        else {
+            $current.AuthType -eq 'Delegated' -and -not (Get-DgMissingPermission -Context $current) -and
+            (-not $Config.Auth.ClientId -or $current.ClientId -eq $Config.Auth.ClientId)
+        }
+        if ($sameIdentity) { return $current }
+    }
     $connect = @{ TenantId = $Config.TenantId; NoWelcome = $true; ErrorAction = 'Stop' }
     if ($Config.Auth.Mode -eq 'Certificate') {
         $connect.ClientId = $Config.Auth.ClientId

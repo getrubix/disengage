@@ -116,10 +116,17 @@ function Format-DgDate {
 }
 
 function Read-DgText {
-    param([Parameter(Mandatory)][string]$Prompt)
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [string]$Default,
+        # Accept an empty answer (returns $Default, which may itself be empty).
+        [switch]$Optional
+    )
+    $hint = if ($Default) { " [$Default]" } elseif ($Optional) { ' [Enter to skip]' } else { '' }
     while ($true) {
-        $answer = Read-Host "  $Prompt"
+        $answer = Read-Host "  $Prompt$hint"
         if (-not [string]::IsNullOrWhiteSpace($answer)) { return $answer.Trim() }
+        if ($Default -or $Optional) { return $Default }
     }
 }
 

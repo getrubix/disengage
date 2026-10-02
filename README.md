@@ -3,10 +3,23 @@
 Interactive CLI that fully offboards a Windows device from **Intune**, **Windows Autopilot**, **Entra ID** and **on-prem Active Directory**. It confirms the result by checking each system again.
 
 ```
-./Disengage.ps1                              # wizard
+./Disengage.ps1                              # wizard (runs first-time setup if there's no config.json)
 ./Disengage.ps1 -SerialNumber 5CG1234XYZ     # skip the lookup prompt
 ./Disengage.ps1 -DeviceName PC-001 -DryRun   # show the plan, change nothing
+./Disengage.ps1 -Setup                       # re-run setup to change settings
 ```
+
+## First run
+
+There's no config file to fill in by hand. On the first run (or with `-Setup`), the wizard:
+
+1. **Signs you in** through the browser and reads the tenant ID from your account. It warns if any Graph permission still needs admin consent.
+2. Asks whether Entra device objects should be **deleted or disabled**.
+3. **Detects your AD domain** if RSAT is installed. It finds your **Entra Connect server** from the `MSOL_*` account in AD and offers to trigger a delta sync there after each AD delete.
+4. Sets up **backup encryption**. You can pick an existing document-encryption certificate, create a new escrow certificate (and export its private key to a `.pfx` for your vault), or fall back to DPAPI.
+5. Writes `config.json` and continues into the wizard using the same sign-in.
+
+Re-running setup keeps your current answers as the defaults, and keeps anything you've edited in the file by hand (paths, timeouts, certificate auth).
 
 ## What it does
 
@@ -63,7 +76,7 @@ With interactive sign-in, the operator also needs roles that allow these actions
 
 ### 2. Backup encryption (recommended)
 
-Create or issue a certificate with the **Document Encryption** EKU and import it into `Cert:\CurrentUser\My` on the admin workstation. The public key is enough. Keep the private key in your escrow location and set `Backup.CertificateThumbprint`.
+Setup can create the certificate for you. To use your own PKI instead, issue a certificate with the **Document Encryption** EKU and import it into `Cert:\CurrentUser\My` on the admin workstation. The public key is enough. Keep the private key in your escrow location, then pick the certificate in setup (or set `Backup.CertificateThumbprint`).
 
 Without a certificate, backups fall back to **DPAPI**, which means only the same Windows account on the same machine can decrypt them. Preflight warns about this.
 
@@ -73,9 +86,9 @@ To read a backup:
 ./Read-DisengageBackup.ps1 -Path ./Backups/PC-001_5CG1234XYZ_20261001-142233.dgbackup
 ```
 
-### 3. Config
+### 3. Config reference
 
-Copy `config.example.json` to `config.json`. `config.json` is git-ignored.
+Setup writes `config.json` for you. You only need to edit it for the settings setup doesn't ask about: paths, timeouts and certificate (app-only) auth. `config.example.json` shows the full shape. `config.json` and `*.pfx` are git-ignored.
 
 | Setting | Meaning |
 |---|---|
@@ -122,6 +135,7 @@ src/
   Offboard.ps1   the destructive steps
   Verify.ps1     post-run verification
   Report.ps1     transcript and JSON report
+  Setup.ps1      first-run setup: sign-in, detection, config.json
   Workflow.ps1   the wizard flow and plan
 tests/           Pester tests (Graph and AD are mocked)
 ```

@@ -23,6 +23,9 @@
 .PARAMETER DryRun
     Discover and show the plan, count the secrets that would be backed up, and change nothing.
 
+.PARAMETER Setup
+    Re-run first-time setup (sign in and regenerate config.json). Runs automatically when no config exists.
+
 .EXAMPLE
     ./Disengage.ps1
 
@@ -38,7 +41,8 @@ param(
     [Parameter(ParameterSetName = 'Name', Mandatory)][string]$DeviceName,
     [Parameter(ParameterSetName = 'Serial', Mandatory)][string]$SerialNumber,
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'config.json'),
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$Setup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +50,15 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'src/Disengage.psm1') -Force
 
 Write-DgBanner -Subtitle ($DryRun ? 'DRY RUN · nothing will be changed' : $null)
+
+if ($Setup -or -not (Test-Path $ConfigPath)) {
+    try {
+        Invoke-DgSetup -Path $ConfigPath
+    } catch {
+        Write-DgStatus Failed "Setup did not finish: $($_.Exception.Message)"
+        exit 3
+    }
+}
 
 Write-DgSection 'Preflight'
 try {

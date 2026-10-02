@@ -1,7 +1,7 @@
 ﻿BeforeAll {
     Import-Module (Join-Path $PSScriptRoot '..' 'src' 'Disengage.psm1') -Force
     # The ActiveDirectory module isn't needed to run tests; give Pester something to mock.
-    foreach ($cmd in 'Get-ADComputer', 'Get-ADObject', 'Remove-ADObject', 'Set-ADObject') {
+    foreach ($cmd in 'Get-ADComputer', 'Get-ADObject', 'Get-ADUser', 'Remove-ADObject', 'Set-ADObject') {
         if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
             New-Item -Path "function:global:$cmd" -Value { param([Parameter(ValueFromRemainingArguments)]$Rest) } | Out-Null
         }
@@ -186,5 +186,45 @@ Describe 'Backups' {
         $file = Save-DgBackup -Context $ctx -Secrets $secrets -Path $dir
         (Get-Content -Raw $file) | Should -Not -Match '111111-222222'
         (Read-DgBackup -Path $file).BitLocker[0].RecoveryKey | Should -Be '111111-222222'
+    }
+}
+
+Describe 'Setup' {
+    BeforeAll {
+        Mock -ModuleName Disengage Write-Host { }
+        Mock -ModuleName Disengage Connect-MgGraph { }
+        Mock -ModuleName Disengage Get-MgContext {
+            [pscustomobject]@{ TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; Account = 'admin@contoso.com'; Scopes = @('Device.ReadWrite.All') }
+        }
+        Mock -ModuleName Disengage Find-DgEncryptionCertificate { @() }
+        Mock -ModuleName Disengage Get-Module { } -ParameterFilter { $Name -eq 'ActiveDirectory' }
+        # Entra: Disable (2nd option). Encryption: DPAPI (last option).
+        Mock -ModuleName Disengage Read-DgChoice { if ($Prompt -like '*Entra ID*') { 1 } else { $Options.Count - 1 } }
+    }
+
+    It 'extracts the Entra Connect server from the MSOL account description' {
+        ConvertFrom-DgMsolDescription 'Account created by Microsoft Azure Active Directory Connect with installation identifier 7c1e running on computer AADC01 configured to synchronize to tenant contoso.onmicrosoft.com.' |
+            Should -Be 'AADC01'
+        ConvertFrom-DgMsolDescription 'Some other service account' | Should -BeNullOrEmpty
+    }
+
+    It 'writes a config that takes the tenant from the signed-in account' {
+        $path = Join-Path $TestDrive 'config.json'
+        Invoke-DgSetup -Path $path
+        $config = Import-DgConfig -Path $path
+        $config.TenantId | Should -Be 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+        $config.EntraAction | Should -Be 'Disable'
+        $config.Auth.Mode | Should -Be 'Interactive'
+        $config.Backup.CertificateThumbprint | Should -BeNullOrEmpty
+        $config.ActiveDirectory.Enabled | Should -BeTrue
+        Should -Invoke -ModuleName Disengage Connect-MgGraph -Times 1 -ParameterFilter { -not $TenantId }
+    }
+
+    It 'keeps hand-edited settings when re-run' {
+        $path = Join-Path $TestDrive 'rerun.json'
+        @{ TenantId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'; Timeouts = @{ WipeMinutes = 90 } } | ConvertTo-Json | Set-Content $path
+        Invoke-DgSetup -Path $path
+        (Import-DgConfig -Path $path).Timeouts.WipeMinutes | Should -Be 90
+        Should -Invoke -ModuleName Disengage Connect-MgGraph -ParameterFilter { $TenantId -eq 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee' }
     }
 }
