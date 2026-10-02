@@ -1,0 +1,28 @@
+{
+  "TenantId": "00000000-0000-0000-0000-000000000000",
+  "Auth": {
+    "Mode": "Interactive",
+    "ClientId": "",
+    "CertificateThumbprint": ""
+  },
+  "EntraAction": "Delete",
+  "RecentActivityHours": 24,
+  "ActiveDirectory": {
+    "Enabled": true,
+    "Server": "",
+    "EntraConnectServer": ""
+  },
+  "Backup": {
+    "Path": "./Backups",
+    "CertificateThumbprint": ""
+  },
+  "Logging": {
+    "Path": "./Logs"
+  },
+  "Timeouts": {
+    "WipeMinutes": 30,
+    "AutopilotMinutes": 15,
+    "EntraSyncMinutes": 40,
+    "PollSeconds": 15
+  }
+}
